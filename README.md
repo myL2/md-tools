@@ -1,6 +1,8 @@
 # md.edit (md-tools)
 
-An offline-first Markdown editor with native SFTP file browsing and synchronization capabilities. Built by myL2 Connect.
+An offline-first Markdown editor with native SFTP file browsing and synchronization capabilities. 
+Inspired by https://keepworking.github.io/nash/
+SFTP support added by myL2 Connect (Claude)
 
 ## Core Features
 
