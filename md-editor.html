@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown Editor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #ffffff;
+  --surface:   #f5f5f5;
+  --surface2:  #eeeeee;
+  --border:    #ddd;
+  --text:      #1a1a1a;
+  --muted:     #777;
+  --accent:    #0070f3;
+  --accent-h:  #005cc5;
+  --danger:    #dc2626;
+  --toolbar:   #fafafa;
+  --code-bg:   #f3f3f3;
+  --mono: 'JetBrains Mono','Fira Code','Cascadia Code','Consolas',monospace;
+  --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:       #1c1c1e;
+    --surface:  #2c2c2e;
+    --surface2: #3a3a3c;
+    --border:   #3a3a3c;
+    --text:     #f0f0f0;
+    --muted:    #98989f;
+    --accent:   #4da6ff;
+    --accent-h: #72b8ff;
+    --danger:   #f87171;
+    --toolbar:  #232325;
+    --code-bg:  #2a2a2c;
+  }
+}
+
+html, body { height: 100%; font-family: var(--sans); background: var(--bg); color: var(--text); overflow: hidden; }
+
+/* ── layout ── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── header ── */
+#header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; height: 42px; flex-shrink: 0;
+  background: var(--toolbar); border-bottom: 1px solid var(--border);
+}
+#brand { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; flex-shrink: 0; }
+#brand span { color: var(--accent); }
+#filename {
+  flex: 1; text-align: center; font-size: 13px; font-weight: 500;
+  color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px;
+}
+#filename.dirty { color: #d97706; }
+#conn-badge {
+  display: none; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted); flex-shrink: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 2px 8px; cursor: default;
+}
+#conn-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+#conn-badge.visible { display: flex; }
+#file-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+.hbtn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 12px; font-family: var(--sans);
+  font-weight: 500; cursor: pointer; transition: background .1s;
+  white-space: nowrap;
+}
+.hbtn:hover { background: var(--surface2); }
+.hbtn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.hbtn.primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+.hbtn.sftp { gap: 5px; }
+.hbtn.sftp.connected { border-color: #22c55e; color: #16a34a; }
+@media (prefers-color-scheme: dark) { .hbtn.sftp.connected { color: #4ade80; border-color: #4ade80; } }
+
+/* ── toolbar ── */
+#toolbar {
+  display: flex; align-items: center; gap: 1px; flex-wrap: wrap;
+  padding: 4px 10px;
+  background: var(--toolbar); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sep { width: 1px; height: 20px; background: var(--border); margin: 0 5px; flex-shrink: 0; }
+.tb {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 30px; height: 28px; padding: 0 5px;
+  border: none; background: transparent; color: var(--text);
+  border-radius: 5px; cursor: pointer;
+  font-size: 12px; font-weight: 700; font-family: var(--sans);
+  white-space: nowrap; transition: background .1s;
+}
+.tb:hover { background: var(--surface2); }
+.tb:active { background: var(--accent); color: #fff; }
+.tb.mono { font-family: var(--mono); font-weight: 400; font-size: 13px; }
+
+/* ── main area (sidebar + editor + preview) ── */
+#main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+/* ── sidebar ── */
+#sidebar {
+  width: 220px; flex-shrink: 0; display: flex; flex-direction: column;
+  background: var(--surface); border-right: 1px solid var(--border);
+  overflow: hidden; transition: width .18s ease;
+}
+#sidebar.collapsed { width: 0; border-right: none; }
+
+#sb-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 8px; height: 36px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--muted);
+}
+#sb-path {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 400; text-transform: none;
+  letter-spacing: 0; color: var(--muted); direction: rtl; text-align: left;
+  cursor: default;
+}
+#sb-up { flex-shrink: 0; }
+
+#file-list { flex: 1; overflow-y: auto; padding: 3px 0; }
+
+.fitem {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 10px; cursor: pointer; font-size: 13px;
+  overflow: hidden; border-radius: 4px; margin: 1px 4px;
+  user-select: none;
+}
+.fitem:hover { background: var(--surface2); }
+.fitem.active { background: var(--accent); color: #fff; }
+.fitem .fi { flex-shrink: 0; font-style: normal; }
+.fitem .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.fitem.dir .fn { font-weight: 500; }
+.fitem.dimmed .fn { color: var(--muted); font-size: 12px; }
+
+#sb-footer {
+  padding: 8px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+#sb-newfile {
+  width: 100%; padding: 5px; border-radius: 5px;
+  border: 1px dashed var(--border); background: transparent;
+  color: var(--muted); font-size: 12px; font-family: var(--sans);
+  cursor: pointer; transition: all .1s;
+}
+#sb-newfile:hover { border-color: var(--accent); color: var(--accent); background: var(--bg); }
+#sb-disconnect {
+  width: 100%; padding: 5px; border-radius: 5px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--danger); font-size: 12px; font-family: var(--sans);
+  cursor: pointer; transition: background .1s;
+}
+#sb-disconnect:hover { background: var(--surface2); }
+
+/* ── sidebar resize handle ── */
+#sb-resizer {
+  width: 4px; flex-shrink: 0; cursor: col-resize;
+  background: transparent; position: relative;
+}
+#sb-resizer::after {
+  content: ''; position: absolute; inset: 0 0 0 1px;
+  background: var(--border);
+}
+#sb-resizer:hover::after, #sb-resizer.active::after { background: var(--accent); }
+#sb-resizer.hidden { display: none; }
+
+/* ── editor area ── */
+#editor-area { display: flex; flex: 1; min-width: 0; overflow: hidden; }
+#editor-pane  { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+#editor {
+  flex: 1; width: 100%; padding: 20px 22px;
+  border: none; outline: none; resize: none;
+  font-family: var(--mono); font-size: 14px; line-height: 1.75;
+  background: var(--bg); color: var(--text); tab-size: 2; overflow-y: auto;
+}
+
+/* ── mid resizer ── */
+#resizer {
+  width: 5px; background: transparent; cursor: col-resize; flex-shrink: 0;
+}
+#resizer::after {
+  content: ''; position: absolute; inset: 0 1px; background: var(--border);
+}
+#resizer { position: relative; }
+#resizer:hover::after, #resizer.active::after { background: var(--accent); }
+
+/* ── preview ── */
+#preview-pane { flex: 1; min-width: 0; overflow-y: auto; }
+#preview {
+  padding: 20px 32px 40px; max-width: 760px; margin: 0 auto;
+  font-size: 15px; line-height: 1.75; color: var(--text);
+}
+#preview h1,#preview h2,#preview h3,#preview h4,#preview h5,#preview h6 { margin: 1.5em 0 0.5em; line-height: 1.3; font-weight: 700; }
+#preview h1 { font-size: 2em; border-bottom: 2px solid var(--border); padding-bottom: .3em; margin-top: .8em; }
+#preview h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }
+#preview h3 { font-size: 1.25em; }
+#preview h4 { font-size: 1.1em; }
+#preview h5 { font-size: 1em; }
+#preview h6 { font-size: .9em; color: var(--muted); }
+#preview h1:first-child { margin-top: 0; }
+#preview p { margin: .75em 0; }
+#preview a { color: var(--accent); text-decoration: underline; word-break: break-all; }
+#preview a:hover { color: var(--accent-h); }
+#preview strong { font-weight: 700; }
+#preview em { font-style: italic; }
+#preview del { text-decoration: line-through; color: var(--muted); }
+#preview code {
+  font-family: var(--mono); font-size: .84em;
+  background: var(--code-bg); padding: .15em .4em;
+  border-radius: 4px; border: 1px solid var(--border);
+}
+#preview pre {
+  background: var(--code-bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin: 1em 0;
+}
+#preview pre code { background: none; border: none; padding: 0; font-size: .875em; line-height: 1.65; }
+#preview blockquote {
+  border-left: 4px solid var(--accent); background: var(--surface);
+  margin: 1em 0; padding: .6em 1.1em; border-radius: 0 6px 6px 0; color: var(--muted);
+}
+#preview blockquote p { margin: .3em 0; }
+#preview ul,#preview ol { margin: .75em 0; padding-left: 1.8em; }
+#preview li { margin: .3em 0; }
+#preview li > ul,#preview li > ol { margin: .2em 0; }
+#preview table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+#preview th,#preview td { border: 1px solid var(--border); padding: 8px 13px; text-align: left; }
+#preview th { background: var(--surface); font-weight: 600; }
+#preview tr:nth-child(even) td { background: var(--surface); }
+#preview hr { border: none; border-top: 2px solid var(--border); margin: 2em 0; }
+#preview img { max-width: 100%; border-radius: 6px; display: block; margin: .5em 0; }
+#preview .task-item { list-style: none; margin-left: -1.4em; }
+#preview .task-item input { margin-right: .5em; }
+
+/* ── status bar ── */
+#status {
+  display: flex; align-items: center; gap: 16px;
+  padding: 3px 14px; flex-shrink: 0;
+  background: var(--toolbar); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--muted);
+}
+#status-save.dirty { color: #d97706; font-weight: 600; }
+#status-pos { margin-left: auto; }
+
+/* ── connection modal ── */
+#modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.45); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+}
+#modal-overlay.hidden { display: none; }
+.modal {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px 28px; width: 420px; max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+.field input {
+  width: 100%; padding: 8px 10px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 14px; font-family: var(--sans);
+  outline: none;
+}
+.field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.field small { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+#modal-error { color: var(--danger); font-size: 13px; margin-bottom: 12px; display: none; }
+#modal-error.visible { display: block; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+
+/* ── toast ── */
+#toast {
+  position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--bg);
+  padding: 8px 18px; border-radius: 20px; font-size: 13px;
+  pointer-events: none; opacity: 0; transition: opacity .2s;
+  z-index: 200; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+
+#file-input { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <div id="header">
+    <span id="brand">md<span>.</span>edit</span>
+    <span id="filename">untitled.md</span>
+    <div id="file-actions">
+      <button class="hbtn sftp" id="btn-sftp" title="Connect via SFTP">⇄ SFTP</button>
+      <button class="hbtn" id="btn-new"  title="New file (Ctrl+N)">New</button>
+      <button class="hbtn" id="btn-open" title="Open local file (Ctrl+O)">Open</button>
+      <button class="hbtn primary" id="btn-save" title="Save (Ctrl+S)">Save</button>
+    </div>
+    <input type="file" id="file-input" accept=".md,.markdown,.txt">
+  </div>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button class="tb" data-action="h1" title="Heading 1">H1</button>
+    <button class="tb" data-action="h2" title="Heading 2">H2</button>
+    <button class="tb" data-action="h3" title="Heading 3">H3</button>
+    <div class="sep"></div>
+    <button class="tb" data-action="bold"          title="Bold (Ctrl+B)"><b>B</b></button>
+    <button class="tb" data-action="italic"        title="Italic (Ctrl+I)" style="font-style:italic">I</button>
+    <button class="tb" data-action="strikethrough" title="Strikethrough" style="text-decoration:line-through">S</button>
+    <div class="sep"></div>
+    <button class="tb mono" data-action="code"      title="Inline code">`&nbsp;`</button>
+    <button class="tb mono" data-action="codeblock" title="Code block">```</button>
+    <div class="sep"></div>
+    <button class="tb" data-action="link"  title="Link (Ctrl+K)">&#128279;</button>
+    <button class="tb" data-action="image" title="Image">&#128247;</button>
+    <div class="sep"></div>
+    <button class="tb" data-action="ul"    title="Bullet list">&#8226;&nbsp;&#8212;</button>
+    <button class="tb" data-action="ol"    title="Numbered list">1.</button>
+    <button class="tb" data-action="task"  title="Task list">&#9744;</button>
+    <button class="tb" data-action="quote" title="Blockquote">&ldquo;&rdquo;</button>
+    <div class="sep"></div>
+    <button class="tb" data-action="table" title="Insert table">&#9868;</button>
+    <button class="tb" data-action="hr"    title="Horizontal rule">&#8212;&#8212;</button>
+    <div class="sep" style="margin-left:auto"></div>
+    <button class="tb" id="btn-sidebar" title="Toggle file browser" style="font-size:15px">&#9776;</button>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+
+    <!-- Sidebar -->
+    <div id="sidebar" class="collapsed">
+      <div id="sb-header">
+        <button class="hbtn sb-icon" id="sb-up" title="Go up" style="min-width:unset;padding:0 6px;">&#8679;</button>
+        <span id="sb-path" title=""></span>
+      </div>
+      <div id="file-list"></div>
+      <div id="sb-footer">
+        <button id="sb-newfile">+ New file in this folder</button>
+        <button id="sb-disconnect">Disconnect SFTP</button>
+      </div>
+    </div>
+    <div id="sb-resizer" class="hidden"></div>
+
+    <!-- Editor + Preview -->
+    <div id="editor-area">
+      <div id="editor-pane">
+        <textarea id="editor" spellcheck="true" autocorrect="off" autocapitalize="off"
+          placeholder="Write your markdown here…"></textarea>
+      </div>
+      <div id="resizer"></div>
+      <div id="preview-pane">
+        <div id="preview"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Status bar -->
+  <div id="status">
+    <span id="status-save">Saved</span>
+    <span id="status-words">0 words</span>
+    <span id="status-chars">0 chars</span>
+    <span id="status-lines">0 lines</span>
+    <span id="status-pos">Ln 1, Col 1</span>
+  </div>
+
+</div>
+
+<!-- Connection modal -->
+<div id="modal-overlay" class="hidden">
+  <div class="modal">
+    <h2>Connect via SFTP</h2>
+    <div id="modal-error"></div>
+    <div class="field">
+      <label>Login string</label>
+      <input id="sftp-login" type="text" placeholder="user@hostname  or  user@hostname:22" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Starting path</label>
+      <input id="sftp-startpath" type="text" placeholder="~ (remote home directory)" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field" id="row-passphrase">
+      <label>Key passphrase <span style="font-weight:400;text-transform:none;letter-spacing:0">(if key is encrypted)</span></label>
+      <input id="sftp-passphrase" type="password" placeholder="Leave blank if not needed" autocomplete="off">
+    </div>
+    <div class="field hidden" id="row-password">
+      <label>Password</label>
+      <input id="sftp-password" type="password" placeholder="SSH password" autocomplete="current-password">
+      <small>Key auth failed — enter your SSH password instead.</small>
+    </div>
+    <div class="modal-footer">
+      <button class="hbtn" id="modal-cancel">Cancel</button>
+      <button class="hbtn primary" id="modal-connect">Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+// MARKDOWN PARSER
+// ─────────────────────────────────────────────────────────────
+const md = {
+  parse(src) {
+    if (!src) return '';
+    src = src.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    return this.blocks(src + '\n');
+  },
+  blocks(src) {
+    const lines = src.split('\n');
+    let out = '', i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (line.trim() === '') { i++; continue; }
+
+      // Fenced code block
+      const fence = line.match(/^(`{3,}|~{3,})(.*)/);
+      if (fence) {
+        const marker = fence[1], lang = fence[2].trim().split(/\s/)[0];
+        i++;
+        const code = [];
+        while (i < lines.length && !lines[i].startsWith(marker)) code.push(lines[i++]);
+        i++;
+        out += `<pre><code${lang ? ` class="language-${this.esc(lang)}"` : ''}>${this.esc(code.join('\n'))}</code></pre>\n`;
+        continue;
+      }
+      // Setext headings
+      if (i + 1 < lines.length && line.trim() && !line.match(/^[-*+]\s/)) {
+        if (/^=+\s*$/.test(lines[i+1])) { out += `<h1>${this.inline(line.trim())}</h1>\n`; i += 2; continue; }
+        if (/^-+\s*$/.test(lines[i+1])) { out += `<h2>${this.inline(line.trim())}</h2>\n`; i += 2; continue; }
+      }
+      // ATX headings
+      const h = line.match(/^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$/);
+      if (h) {
+        const lv = h[1].length;
+        const id = h[2].toLowerCase().replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'-');
+        out += `<h${lv} id="${id}">${this.inline(h[2].trim())}</h${lv}>\n`; i++; continue;
+      }
+      // HR
+      if (/^(\*{3,}|-{3,}|_{3,})[ \t]*$/.test(line.trim())) { out += '<hr>\n'; i++; continue; }
+      // Blockquote
+      if (line.startsWith('> ') || line === '>') {
+        const bq = [];
+        while (i < lines.length && (lines[i].startsWith('> ') || lines[i] === '>')) {
+          bq.push(lines[i].replace(/^>\s?/,'')); i++;
+        }
+        out += `<blockquote>\n${this.blocks(bq.join('\n')+'\n')}</blockquote>\n`; continue;
+      }
+      // List
+      if (line.match(/^[ \t]*([-*+])[ \t]+/) || line.match(/^[ \t]*\d+\.[ \t]+/)) {
+        const r = this.list(lines, i); out += r.html; i = r.next; continue;
+      }
+      // Table
+      if (i+1 < lines.length && lines[i+1].match(/^\|?[ \t]*:?-{1,}:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/)) {
+        const r = this.table(lines, i); out += r.html; i = r.next; continue;
+      }
+      // Paragraph
+      const pl = [];
+      while (i < lines.length) {
+        const l = lines[i];
+        if (l.trim() === '') break;
+        if (l.match(/^#{1,6}\s/)||l.match(/^(`{3,}|~{3,})/)||l.startsWith('> ')||l==='>'||l.match(/^[ \t]*([-*+])[ \t]+/)||l.match(/^[ \t]*\d+\.[ \t]+/)||/^(\*{3,}|-{3,}|_{3,})[ \t]*$/.test(l.trim())) break;
+        pl.push(l); i++;
+      }
+      if (pl.length) {
+        const text = pl.map((l,k)=> k<pl.length-1&&l.endsWith('  ') ? l.trimEnd()+'<br>' : l).join('\n');
+        out += `<p>${this.inline(text.replace(/\n/g,' '))}</p>\n`;
+      }
+    }
+    return out;
+  },
+  list(lines, startI) {
+    const first = lines[startI];
+    const isOl  = /^[ \t]*\d+\.[ \t]/.test(first);
+    const baseIndent = first.match(/^([ \t]*)/)[1].length;
+    const tag = isOl ? 'ol' : 'ul';
+    let html = `<${tag}>\n`, i = startI;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (line.trim() === '') { i++; continue; }
+      if (line.match(/^([ \t]*)/)[1].length < baseIndent) break;
+      const m = isOl ? line.match(/^[ \t]*\d+\.[ \t]+(.*)/) : line.match(/^[ \t]*[-*+][ \t]+(.*)/);
+      if (!m) break;
+      let content = m[1]; i++;
+      const extras = [];
+      while (i < lines.length) {
+        const next = lines[i];
+        if (next.trim() === '') { extras.push(''); i++; continue; }
+        const ni = next.match(/^([ \t]*)/)[1].length;
+        if (ni <= baseIndent && next.match(/^[ \t]*[-*+\d]/)) break;
+        if (ni > baseIndent) { extras.push(next); i++; } else break;
+      }
+      const task = content.match(/^\[([ xX])\]\s+(.*)/);
+      let inner;
+      if (task) {
+        const checked = task[1].toLowerCase()==='x' ? ' checked' : '';
+        inner = `<input type="checkbox"${checked} disabled> ${this.inline(task[2])}`;
+        if (extras.length) inner += this.blocks(extras.join('\n')+'\n');
+        html += `<li class="task-item">${inner}</li>\n`;
+      } else {
+        inner = extras.length ? this.inline(content)+this.blocks(extras.join('\n')+'\n') : this.inline(content);
+        html += `<li>${inner}</li>\n`;
+      }
+    }
+    html += `</${tag}>\n`;
+    return { html, next: i };
+  },
+  table(lines, i) {
+    const split = r => r.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+    const headers = split(lines[i]);
+    const aligns  = split(lines[i+1]).map(s => s.startsWith(':')&&s.endsWith(':') ? 'center' : s.endsWith(':') ? 'right' : s.startsWith(':') ? 'left' : '');
+    let html = '<table>\n<thead>\n<tr>\n';
+    headers.forEach((h,k) => { const a=aligns[k]?` style="text-align:${aligns[k]}"`:''; html+=`<th${a}>${this.inline(h)}</th>\n`; });
+    html += '</tr>\n</thead>\n<tbody>\n'; i += 2;
+    while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+      const cells = split(lines[i]);
+      html += '<tr>\n';
+      headers.forEach((_,k) => { const a=aligns[k]?` style="text-align:${aligns[k]}"`:''; html+=`<td${a}>${this.inline(cells[k]??'')}</td>\n`; });
+      html += '</tr>\n'; i++;
+    }
+    html += '</tbody>\n</table>\n';
+    return { html, next: i };
+  },
+  inline(src) {
+    if (!src) return '';
+    const stash = [];
+    src = src.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1/g, (_,t,c) => { stash.push(`<code>${this.esc(c.trim())}</code>`); return `\x00${stash.length-1}\x00`; });
+    src = src.replace(/<(https?:\/\/[^>]+)>/g, (_,u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+    src = src.replace(/<([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>/g, (_,e) => `<a href="mailto:${e}">${e}</a>`);
+    src = src.replace(/!\[([^\]]*)\]\(([^)]+?)(?:\s+"([^"]*)")?\)/g, (_,alt,u,ti) => `<img src="${u}" alt="${this.esc(alt)}"${ti?` title="${this.esc(ti)}"`:''} loading="lazy">`);
+    src = src.replace(/\[([^\]]+)\]\(([^)]+?)(?:\s+"([^"]*)")?\)/g, (_,text,href,ti) => { const ext=href.startsWith('#')?'':' target="_blank" rel="noopener"'; return `<a href="${href}"${ext}${ti?` title="${this.esc(ti)}"`:''} >${text}</a>`; });
+    src = src.replace(/\*{3}([^*\n]+?)\*{3}/g,'<strong><em>$1</em></strong>');
+    src = src.replace(/_{3}([^_\n]+?)_{3}/g,  '<strong><em>$1</em></strong>');
+    src = src.replace(/\*{2}([^*\n]+?)\*{2}/g,'<strong>$1</strong>');
+    src = src.replace(/_{2}([^_\n]+?)_{2}/g,  '<strong>$1</strong>');
+    src = src.replace(/\*([^*\n]+?)\*/g,'<em>$1</em>');
+    src = src.replace(/_([^_\n]+?)_/g,  '<em>$1</em>');
+    src = src.replace(/~~([^~\n]+?)~~/g,'<del>$1</del>');
+    src = src.replace(/  \n/g,'<br>').replace(/\\\n/g,'<br>');
+    src = src.replace(/\x00(\d+)\x00/g, (_,n) => stash[+n]);
+    return src;
+  },
+  esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+};
+
+// ─────────────────────────────────────────────────────────────
+// DOM REFS
+// ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const editor      = $('editor');
+const preview     = $('preview');
+const fnEl        = $('filename');
+const saveEl      = $('status-save');
+const wordsEl     = $('status-words');
+const charsEl     = $('status-chars');
+const linesEl     = $('status-lines');
+const posEl       = $('status-pos');
+const sidebar     = $('sidebar');
+const sbPath      = $('sb-path');
+const fileList    = $('file-list');
+const sbResizer   = $('sb-resizer');
+const modalOverlay = $('modal-overlay');
+const modalError  = $('modal-error');
+const toastEl     = $('toast');
+
+// ─────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────
+const SERVER = 'http://127.0.0.1:3737';
+let filename    = 'untitled.md';
+let fileHandle  = null;
+let remotePath  = null;   // current remote file path
+let remoteDir   = null;   // current remote directory
+let dirty       = false;
+let sftpOk      = false;
+let activeFile  = null;   // filename highlighted in sidebar
+let previewTimer = null;
+const hasFSA    = 'showOpenFilePicker' in window;
+const isServed  = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+
+// ─────────────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, duration = 2500) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PREVIEW & STATUS
+// ─────────────────────────────────────────────────────────────
+function renderPreview() { preview.innerHTML = md.parse(editor.value); }
+
+function updateStatus() {
+  const val   = editor.value;
+  const words = (preview.textContent||'').trim().split(/\s+/).filter(Boolean).length;
+  wordsEl.textContent = `${words} word${words!==1?'s':''}`;
+  charsEl.textContent = `${val.length} char${val.length!==1?'s':''}`;
+  const nl = val.split('\n').length;
+  linesEl.textContent = `${nl} line${nl!==1?'s':''}`;
+}
+
+function scheduleUpdate() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => { renderPreview(); updateStatus(); }, 120);
+}
+
+editor.addEventListener('input', () => { markDirty(); scheduleUpdate(); });
+editor.addEventListener('keyup',  updateCursorPos);
+editor.addEventListener('click',  updateCursorPos);
+
+function updateCursorPos() {
+  const val = editor.value.substring(0, editor.selectionStart);
+  const ls  = val.split('\n');
+  posEl.textContent = `Ln ${ls.length}, Col ${ls[ls.length-1].length+1}`;
+}
+
+function markDirty() {
+  if (dirty) return;
+  dirty = true;
+  saveEl.textContent = 'Unsaved'; saveEl.className = 'dirty';
+  fnEl.textContent = filename + ' *'; fnEl.className = 'dirty';
+}
+function markClean() {
+  dirty = false;
+  saveEl.textContent = remotePath ? 'Saved to remote' : 'Saved'; saveEl.className = '';
+  fnEl.textContent = filename; fnEl.className = '';
+}
+function setFilename(name) {
+  filename = name;
+  document.title = name + ' — md.edit';
+  fnEl.textContent = name; fnEl.className = '';
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOLBAR ACTIONS
+// ─────────────────────────────────────────────────────────────
+function wrap(before, after, placeholder) {
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const sel = editor.value.slice(s,e) || placeholder || '';
+  editor.setRangeText(before+sel+after, s, e, 'select');
+  if (!editor.value.slice(s,e) && placeholder)
+    editor.setSelectionRange(s+before.length, s+before.length+placeholder.length);
+  editor.focus(); markDirty(); scheduleUpdate();
+}
+function linePrefix(prefix) {
+  const s = editor.selectionStart, e = editor.selectionEnd, val = editor.value;
+  const lStart = val.lastIndexOf('\n', s-1)+1;
+  let lEnd = val.indexOf('\n', e); if (lEnd<0) lEnd = val.length;
+  const lines = val.slice(lStart,lEnd).split('\n');
+  const toggled = lines.every(l=>l.startsWith(prefix)) ? lines.map(l=>l.slice(prefix.length)) : lines.map(l=>l.startsWith(prefix)?l:prefix+l);
+  editor.setRangeText(toggled.join('\n'), lStart, lEnd, 'preserve');
+  editor.focus(); markDirty(); scheduleUpdate();
+}
+function insertBlock(text) {
+  const s = editor.selectionStart, val = editor.value;
+  const pre = s>0&&val[s-1]!=='\n' ? '\n' : '';
+  editor.setRangeText(pre+text, s, s, 'end');
+  editor.focus(); markDirty(); scheduleUpdate();
+}
+const actions = {
+  h1:()=>linePrefix('# '), h2:()=>linePrefix('## '), h3:()=>linePrefix('### '),
+  bold:()=>wrap('**','**','bold text'), italic:()=>wrap('*','*','italic text'),
+  strikethrough:()=>wrap('~~','~~','strikethrough'), code:()=>wrap('`','`','code'),
+  codeblock:()=>insertBlock('```\ncode here\n```\n'),
+  link:()=>{ const s=editor.value.slice(editor.selectionStart,editor.selectionEnd); s?wrap('[','](url)',s):wrap('[','](url)','link text'); },
+  image:()=>wrap('![','](url)','alt text'),
+  ul:()=>linePrefix('- '), ol:()=>linePrefix('1. '), task:()=>linePrefix('- [ ] '),
+  quote:()=>linePrefix('> '), hr:()=>insertBlock('\n---\n\n'),
+  table:()=>insertBlock('\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n\n'),
+};
+$('toolbar').addEventListener('click', e => { const b=e.target.closest('[data-action]'); if(b) actions[b.dataset.action]?.(); });
+
+// ─────────────────────────────────────────────────────────────
+// KEYBOARD SHORTCUTS
+// ─────────────────────────────────────────────────────────────
+editor.addEventListener('keydown', e => {
+  const mod = e.ctrlKey||e.metaKey;
+  if (mod&&e.key==='b'){ e.preventDefault(); actions.bold(); }
+  if (mod&&e.key==='i'){ e.preventDefault(); actions.italic(); }
+  if (mod&&e.key==='k'){ e.preventDefault(); actions.link(); }
+  if (mod&&e.key==='s'){ e.preventDefault(); saveFile(); }
+  if (mod&&e.key==='o'){ e.preventDefault(); openLocalFile(); }
+  if (mod&&e.key==='n'){ e.preventDefault(); newFile(); }
+  if (e.key==='Tab'){
+    e.preventDefault();
+    const s=editor.selectionStart, end=editor.selectionEnd;
+    s===end ? editor.setRangeText('  ',s,s,'end') : linePrefix(e.shiftKey?'':'  ');
+    markDirty(); scheduleUpdate();
+  }
+});
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey)&&document.activeElement!==editor){
+    if (e.key==='s'){e.preventDefault();saveFile();}
+    if (e.key==='o'){e.preventDefault();openLocalFile();}
+    if (e.key==='n'){e.preventDefault();newFile();}
+  }
+  if (e.key==='Escape' && !modalOverlay.classList.contains('hidden')) closeModal();
+});
+
+// ─────────────────────────────────────────────────────────────
+// FILE I/O — LOCAL
+// ─────────────────────────────────────────────────────────────
+async function newFile() {
+  if (dirty && !confirm('Unsaved changes — discard and start new?')) return;
+  editor.value=''; fileHandle=null; remotePath=null;
+  setFilename('untitled.md'); markClean();
+  renderPreview(); updateStatus(); editor.focus();
+  highlightFile(null);
+}
+async function openLocalFile() {
+  if (hasFSA) {
+    try {
+      const [handle] = await window.showOpenFilePicker({ types:[{description:'Markdown / text',accept:{'text/markdown':['.md','.markdown'],'text/plain':['.txt']}}] });
+      const file = await handle.getFile();
+      editor.value = await file.text();
+      fileHandle = handle; remotePath = null;
+      setFilename(file.name); markClean();
+      renderPreview(); updateStatus(); editor.focus(); highlightFile(null);
+    } catch(err){ if(err.name!=='AbortError') $('file-input').click(); }
+  } else { $('file-input').click(); }
+}
+$('file-input').addEventListener('change', async e => {
+  const file = e.target.files[0]; if(!file) return;
+  editor.value = await file.text(); fileHandle=null; remotePath=null;
+  setFilename(file.name); markClean();
+  renderPreview(); updateStatus(); editor.focus(); highlightFile(null);
+  e.target.value='';
+});
+async function saveFile() {
+  // Remote save
+  if (remotePath) { await saveRemote(); return; }
+  // Local
+  if (hasFSA) {
+    try {
+      if (!fileHandle) {
+        fileHandle = await window.showSaveFilePicker({ suggestedName: filename, types:[{description:'Markdown file',accept:{'text/markdown':['.md']}}] });
+        setFilename(fileHandle.name);
+      }
+      const w = await fileHandle.createWritable();
+      await w.write(editor.value); await w.close(); markClean(); return;
+    } catch(err){ if(err.name==='AbortError') return; }
+  }
+  // Fallback download
+  const blob = new Blob([editor.value],{type:'text/markdown;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'),{href:url,download:filename}).click();
+  URL.revokeObjectURL(url); markClean();
+}
+$('btn-new').addEventListener('click',  newFile);
+$('btn-open').addEventListener('click', openLocalFile);
+$('btn-save').addEventListener('click', saveFile);
+
+// ─────────────────────────────────────────────────────────────
+// SFTP API
+// ─────────────────────────────────────────────────────────────
+async function api(method, endpoint, body) {
+  const res = await fetch(SERVER + endpoint, {
+    method,
+    headers: body ? {'Content-Type':'application/json'} : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const ct = res.headers.get('content-type')||'';
+  if (ct.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) { const e = new Error(data.error||'Request failed'); e.needsPassword=data.needsPassword; throw e; }
+    return data;
+  }
+  if (!res.ok) throw new Error(await res.text());
+  return res.text();
+}
+
+async function checkServer() {
+  try { await api('GET','/api/status'); return true; } catch { return false; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// SFTP FILE BROWSER
+// ─────────────────────────────────────────────────────────────
+function showSidebar() {
+  sidebar.classList.remove('collapsed');
+  sbResizer.classList.remove('hidden');
+}
+function hideSidebar() {
+  sidebar.classList.add('collapsed');
+  sbResizer.classList.add('hidden');
+}
+
+async function browseTo(dirPath) {
+  try {
+    const data = await api('GET', `/api/ls?path=${encodeURIComponent(dirPath)}`);
+    remoteDir = data.path;
+    sbPath.textContent = data.path;
+    sbPath.title = data.path;
+    $('sb-up').disabled = !data.parent;
+
+    fileList.innerHTML = '';
+    // Parent dir shortcut
+    if (data.parent) {
+      const up = makeFileItem('..', 'dir');
+      up.addEventListener('click', () => browseTo(data.parent));
+      fileList.appendChild(up);
+    }
+    data.items.forEach(item => {
+      const el = makeFileItem(item.name, item.type);
+      if (item.name === activeFile) el.classList.add('active');
+      el.addEventListener('click', () => {
+        if (item.type === 'dir') {
+          browseTo(data.path + '/' + item.name);
+        } else {
+          openRemoteFile(data.path + '/' + item.name, item.name);
+        }
+      });
+      fileList.appendChild(el);
+    });
+  } catch(e) { toast('Browse error: ' + e.message); }
+}
+
+function makeFileItem(name, type) {
+  const el = document.createElement('div');
+  el.className = 'fitem' + (type==='dir' ? ' dir' : '');
+  const isEditable = /\.(md|markdown|txt|json|yaml|yml|toml|ini|sh|py|js|ts|css|html)$/i.test(name);
+  if (type==='file' && !isEditable) el.classList.add('dimmed');
+  const icon = type==='dir' ? '📁' : (name.match(/\.md$/i) ? '📝' : '📄');
+  el.innerHTML = `<span class="fi">${icon}</span><span class="fn">${name}</span>`;
+  return el;
+}
+
+function highlightFile(name) {
+  activeFile = name;
+  fileList.querySelectorAll('.fitem').forEach(el => {
+    const n = el.querySelector('.fn')?.textContent;
+    el.classList.toggle('active', n===name && name!==null);
+  });
+}
+
+async function openRemoteFile(filePath, name) {
+  if (dirty && !confirm('Unsaved changes — discard and open remote file?')) return;
+  try {
+    const content = await api('GET', `/api/read?path=${encodeURIComponent(filePath)}`);
+    editor.value = typeof content === 'string' ? content : '';
+    remotePath = filePath; fileHandle = null;
+    setFilename(name||filePath.split('/').pop()); markClean();
+    renderPreview(); updateStatus(); editor.focus();
+    highlightFile(name||filePath.split('/').pop());
+  } catch(e) { toast('Open failed: ' + e.message); }
+}
+
+async function saveRemote() {
+  try {
+    await api('POST', '/api/write', { path: remotePath, content: editor.value });
+    markClean(); toast('Saved → ' + remotePath);
+  } catch(e) { toast('Save failed: ' + e.message); }
+}
+
+$('sb-up').addEventListener('click', () => {
+  if (remoteDir) {
+    const parent = remoteDir.split('/').slice(0,-1).join('/') || '/';
+    browseTo(parent);
+  }
+});
+$('sb-newfile').addEventListener('click', async () => {
+  const name = prompt('New file name (e.g. notes.md):');
+  if (!name) return;
+  const filePath = (remoteDir||'') + '/' + name;
+  try {
+    await api('POST', '/api/write', { path: filePath, content: '' });
+    await openRemoteFile(filePath, name);
+    await browseTo(remoteDir);
+  } catch(e) { toast('Create failed: ' + e.message); }
+});
+$('sb-disconnect').addEventListener('click', disconnectSftp);
+
+// ─────────────────────────────────────────────────────────────
+// SFTP CONNECT / DISCONNECT
+// ─────────────────────────────────────────────────────────────
+function openModal() {
+  $('row-password').classList.add('hidden');
+  $('sftp-password').value = '';
+  modalError.textContent = ''; modalError.classList.remove('visible');
+  modalOverlay.classList.remove('hidden');
+  setTimeout(() => $('sftp-login').focus(), 50);
+}
+function closeModal() { modalOverlay.classList.add('hidden'); }
+$('modal-cancel').addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', e => { if(e.target===modalOverlay) closeModal(); });
+
+async function doConnect(withPassword) {
+  const loginStr   = $('sftp-login').value.trim();
+  const startPath  = $('sftp-startpath').value.trim() || '~';
+  const passphrase = $('sftp-passphrase').value;
+  const password   = withPassword ? $('sftp-password').value : undefined;
+  if (!loginStr) { showModalError('Enter a login string (user@host)'); return; }
+  $('modal-connect').disabled = true;
+  $('modal-connect').textContent = 'Connecting…';
+  modalError.classList.remove('visible');
+  try {
+    const data = await api('POST', '/api/connect', { loginStr, startPath, passphrase, password });
+    sftpOk = true;
+    $('btn-sftp').textContent = '⇄ ' + data.display;
+    $('btn-sftp').classList.add('connected');
+    showSidebar();
+    await browseTo(data.path);
+    closeModal();
+  } catch(e) {
+    if (e.needsPassword) {
+      $('row-password').classList.remove('hidden');
+      $('sftp-password').focus();
+      showModalError('Key auth failed — enter your password below.');
+    } else {
+      showModalError(e.message);
+    }
+  } finally {
+    $('modal-connect').disabled = false;
+    $('modal-connect').textContent = 'Connect';
+  }
+}
+function showModalError(msg) { modalError.textContent = msg; modalError.classList.add('visible'); }
+
+$('modal-connect').addEventListener('click', () => {
+  const needsPw = !$('row-password').classList.contains('hidden');
+  doConnect(needsPw);
+});
+['sftp-login','sftp-startpath','sftp-passphrase','sftp-password'].forEach(id => {
+  $(id).addEventListener('keydown', e => { if(e.key==='Enter') $('modal-connect').click(); });
+});
+
+async function disconnectSftp() {
+  try { await api('POST', '/api/disconnect'); } catch {}
+  sftpOk = false; remoteDir = null; remotePath = null; activeFile = null;
+  $('btn-sftp').textContent = '⇄ SFTP';
+  $('btn-sftp').classList.remove('connected');
+  hideSidebar();
+  if (filename !== 'untitled.md') markClean(); // clear remote badge in status
+  toast('Disconnected');
+}
+
+$('btn-sftp').addEventListener('click', async () => {
+  if (!isServed) {
+    alert('SFTP requires the local server.\n\nRun:\n  node ~/.local/share/md-editor/server.js\n\nThen open:\n  http://127.0.0.1:3737/md-editor.html');
+    return;
+  }
+  if (sftpOk) { disconnectSftp(); } else { openModal(); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// SIDEBAR TOGGLE
+// ─────────────────────────────────────────────────────────────
+$('btn-sidebar').addEventListener('click', () => {
+  if (sftpOk) {
+    sidebar.classList.toggle('collapsed');
+    sbResizer.classList.toggle('hidden', sidebar.classList.contains('collapsed'));
+  } else if (isServed) {
+    openModal();
+  } else {
+    alert('SFTP requires the local server.\n\nRun:\n  node ~/.local/share/md-editor/server.js\n\nThen open:\n  http://127.0.0.1:3737/md-editor.html');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// RESIZERS
+// ─────────────────────────────────────────────────────────────
+function makeResizer(handle, leftEl, rightEl, container, minPct, maxPct) {
+  let resizing=false, startX=0, startW=0;
+  handle.addEventListener('mousedown', e => {
+    resizing=true; startX=e.clientX; startW=leftEl.offsetWidth;
+    handle.classList.add('active');
+    document.body.style.cssText='cursor:col-resize;user-select:none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resizing) return;
+    const total = container.offsetWidth - handle.offsetWidth;
+    const newW  = Math.max(total*minPct, Math.min(total*maxPct, startW+(e.clientX-startX)));
+    leftEl.style.flex='none'; leftEl.style.width=newW+'px';
+    if (rightEl) { rightEl.style.flex='1'; rightEl.style.width=''; }
+  });
+  document.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    resizing=false; handle.classList.remove('active');
+    document.body.style.cssText='';
+  });
+}
+makeResizer($('resizer'),    $('editor-pane'), $('preview-pane'), $('editor-area'), .2, .8);
+makeResizer($('sb-resizer'), $('sidebar'),     null,             $('main'),        .1, .5);
+
+// ─────────────────────────────────────────────────────────────
+// UNSAVED WARNING
+// ─────────────────────────────────────────────────────────────
+window.addEventListener('beforeunload', e => { if(dirty){e.preventDefault();e.returnValue='';} });
+
+// ─────────────────────────────────────────────────────────────
+// CHECK SERVER ON LOAD
+// ─────────────────────────────────────────────────────────────
+if (isServed) {
+  checkServer().then(ok => {
+    if (ok) {
+      // Server is up — check if already connected from a previous session
+      api('GET','/api/status').then(s => {
+        if (s.connected && s.connMeta) {
+          sftpOk = true;
+          $('btn-sftp').textContent = `⇄ ${s.connMeta.user}@${s.connMeta.host}`;
+          $('btn-sftp').classList.add('connected');
+          // Re-fetch current dir if available
+          showSidebar();
+          browseTo('.');
+        }
+      }).catch(()=>{});
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// INITIAL CONTENT
+// ─────────────────────────────────────────────────────────────
+const WELCOME = `# Welcome to md.edit
+
+A clean, **offline-first** Markdown editor — and now with **SFTP** file browsing.
+
+## Getting started
+
+${isServed
+  ? '> The local server is running. Click **⇄ SFTP** to connect to a remote host.'
+  : '> To enable SFTP, run the server:\n> \`\`\`\n> node ~/.local/share/md-editor/server.js\n> \`\`\`\n> Then open **http://127.0.0.1:3737/md-editor.html**'}
+
+## Formatting
+
+*italic*, **bold**, ~~strikethrough~~, \`inline code\`, ***bold italic***
+
+### Code
+
+\`\`\`javascript
+function greet(name) {
+  return \`Hello, \${name}!\`;
+}
+\`\`\`
+
+### Table
+
+| Feature         | Status |
+| :-------------- | :----: |
+| Split view      |   ✅   |
+| SFTP open/save  |   ✅   |
+| Local open/save |   ✅   |
+| Dark mode       |   ✅   |
+| Works offline   |   ✅   |
+
+### Task list
+
+- [x] Build the editor
+- [x] Add SFTP support
+- [ ] World domination
+
+---
+
+*Start typing, or open a file.*
+`;
+
+editor.value = WELCOME;
+setFilename('untitled.md'); markClean();
+renderPreview(); updateStatus(); editor.focus();
+</script>
+</body>
+</html>

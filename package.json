@@ -1,0 +1,80 @@
+{
+  "name": "md-edit",
+  "version": "1.0.0",
+  "description": "Offline Markdown editor with SFTP file browsing",
+  "main": "main.js",
+  "author": { "name": "seb", "email": "seb@localhost" },
+  "homepage": "https://github.com/seb/md-edit",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dist": "electron-builder --linux --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "ssh2-sftp-client": "^11.0.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.mdedit.app",
+    "productName": "md.edit",
+    "copyright": "MIT",
+    "npmRebuild": false,
+    "files": [
+      "main.js",
+      "server.js",
+      "md-editor.html",
+      "node_modules/**/*",
+      "!node_modules/.cache",
+      "!node_modules/.package-lock.json"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Utility",
+      "executableName": "md-edit"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "executableName": "md-edit"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": true
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libxss1",
+        "libnss3"
+      ]
+    }
+  }
+}
